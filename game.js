@@ -102,26 +102,70 @@ class Game {
         this.gamePaused = false;
         this.mouseX = canvas.width / 2;
         this.mouseY = canvas.height / 2;
+        
+        // Performance and safety limits
+        this.MAX_FISH = 150; // Prevent unlimited fish spawning
+        this.MAX_SIZE = 100; // Cap player size to prevent performance issues
+        this.MAX_SCORE = 99999; // Maximum displayable score
+        this.isMobile = this.checkMobile();
 
         this.setupEventListeners();
     }
 
+    checkMobile() {
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    }
+
     setupCanvas() {
         const rect = this.canvas.getBoundingClientRect();
-        this.canvas.width = Math.min(800, rect.width * 0.95);
-        this.canvas.height = 500;
+        const windowWidth = window.innerWidth;
+        
+        // Better mobile sizing
+        if (this.isMobile) {
+            this.canvas.width = Math.min(600, windowWidth * 0.95);
+            this.canvas.height = 400;
+        } else {
+            this.canvas.width = Math.min(800, windowWidth * 0.95);
+            this.canvas.height = 500;
+        }
+        
+        // Set style for sharp rendering on high-DPI displays
+        this.canvas.style.width = this.canvas.width + 'px';
+        this.canvas.style.height = this.canvas.height + 'px';
     }
 
     setupEventListeners() {
+        // Mouse controls for desktop
         window.addEventListener('mousemove', (e) => {
             const rect = this.canvas.getBoundingClientRect();
             this.mouseX = e.clientX - rect.left;
             this.mouseY = e.clientY - rect.top;
         });
 
+        // Touch controls for mobile
+        this.canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const rect = this.canvas.getBoundingClientRect();
+            const touch = e.touches[0];
+            this.mouseX = touch.clientX - rect.left;
+            this.mouseY = touch.clientY - rect.top;
+        }, { passive: false });
+
+        // Handle touch start
+        this.canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const rect = this.canvas.getBoundingClientRect();
+            const touch = e.touches[0];
+            this.mouseX = touch.clientX - rect.left;
+            this.mouseY = touch.clientY - rect.top;
+        }, { passive: false });
+
         document.getElementById('startBtn').addEventListener('click', () => this.start());
         document.getElementById('pauseBtn').addEventListener('click', () => this.togglePause());
         document.getElementById('restartBtn').addEventListener('click', () => this.start());
+        
+        // Handle window resize
+        window.addEventListener('resize', () => this.setupCanvas());
     }
 
     start() {
@@ -132,6 +176,13 @@ class Game {
         this.gameRunning = true;
         this.gamePaused = false;
         document.getElementById('gameOver').classList.add('hidden');
+        
+        // Update controls text based on device type
+        const controlsText = this.isMobile ? 
+            '<strong>Controls:</strong> Tap and drag your finger to move the fish' :
+            '<strong>Controls:</strong> Move your mouse to move the fish';
+        document.getElementById('controlsText').innerHTML = controlsText;
+        
         this.spawnSmallFish(15);
         this.gameLoop();
     }
@@ -147,7 +198,15 @@ class Game {
     }
 
     spawnSmallFish(count) {
-        for (let i = 0; i < count; i++) {
+        // Don't spawn if we've hit max fish limit
+        if (this.smallFish.length >= this.MAX_FISH) {
+            return;
+        }
+        
+        // Limit spawn count to not exceed max
+        const safeCount = Math.min(count, this.MAX_FISH - this.smallFish.length);
+        
+        for (let i = 0; i < safeCount; i++) {
             let x, y, distance;
             // Spawn fish away from player
             do {
@@ -166,11 +225,11 @@ class Game {
     update() {
         if (!this.gameRunning || this.gamePaused) return;
 
-        // Move player towards mouse
+        // Move player towards mouse/touch
         const dx = this.mouseX - this.player.x;
         const dy = this.mouseY - this.player.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
-        const speed = 4;
+        const speed = this.isMobile ? 3 : 4; // Slightly slower on mobile for better control
 
         if (distance > 5) {
             this.player.vx = (dx / distance) * speed;
@@ -186,7 +245,7 @@ class Game {
         // Update small fish
         this.smallFish.forEach(fish => fish.update(this.canvas));
 
-        // Check collisions
+        // Check collisions - eating fish
         for (let i = this.smallFish.length - 1; i >= 0; i--) {
             if (this.player.canEat(this.smallFish[i])) {
                 const eatenFish = this.smallFish.splice(i, 1)[0];
@@ -202,8 +261,9 @@ class Game {
             }
         }
 
-        // Spawn new fish when needed
-        if (this.smallFish.length < 10 + this.level * 5) {
+        // Spawn new fish when needed (with safety limits)
+        const maxAllowed = Math.min(10 + this.level * 5, this.MAX_FISH);
+        if (this.smallFish.length < maxAllowed) {
             this.spawnSmallFish(Math.floor(this.level * 1.5));
         }
 
@@ -211,11 +271,14 @@ class Game {
     }
 
     eatFish(fish) {
-        this.score += Math.floor(fish.size);
-        // Increase player size gradually
-        this.player.size += fish.size * 0.1;
+        // Add safe score increase with maximum cap
+        const scoreIncrease = Math.min(Math.floor(fish.size), 999);
+        this.score = Math.min(this.score + scoreIncrease, this.MAX_SCORE);
+        
+        // Increase player size gradually with cap
+        this.player.size = Math.min(this.player.size + fish.size * 0.1, this.MAX_SIZE);
 
-        // Level up
+        // Level up based on score
         if (this.score > 200 + (this.level - 1) * 300) {
             this.level++;
         }
@@ -240,8 +303,16 @@ class Game {
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
         if (this.gameRunning) {
-            // Draw small fish
-            this.smallFish.forEach(fish => fish.draw(this.ctx));
+            // Draw small fish (limit rendering for performance on mobile)
+            const maxRenderDistance = Math.max(this.canvas.width, this.canvas.height);
+            this.smallFish.forEach(fish => {
+                // Only draw fish that are visible or close to viewport
+                const dx = fish.x - this.player.x;
+                const dy = fish.y - this.player.y;
+                if (Math.abs(dx) < maxRenderDistance && Math.abs(dy) < maxRenderDistance) {
+                    fish.draw(this.ctx);
+                }
+            });
 
             // Draw player
             if (this.player) {
@@ -249,12 +320,12 @@ class Game {
             }
 
             // Draw level indicator
-            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-            this.ctx.font = '14px Arial';
-            this.ctx.fillText(`Level ${this.level}`, 10, 25);
+            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            this.ctx.font = this.isMobile ? '12px Arial' : '14px Arial';
+            this.ctx.fillText(`Level ${this.level} | Fish: ${this.smallFish.length}`, 10, this.isMobile ? 20 : 25);
         } else if (!this.gamePaused) {
             this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            this.ctx.font = 'bold 30px Arial';
+            this.ctx.font = this.isMobile ? 'bold 20px Arial' : 'bold 30px Arial';
             this.ctx.textAlign = 'center';
             this.ctx.fillText('Click "Start Game" to begin!', this.canvas.width / 2, this.canvas.height / 2);
             this.ctx.textAlign = 'left';
