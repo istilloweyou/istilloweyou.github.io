@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Big Fish Eat Small Fish</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>🐟 Big Fish Eat Small Fish 🐟</h1>
+        <div class="game-info">
+            <div class="info-item">
+                <span class="label">Size:</span>
+                <span id="sizeDisplay">1.0</span>
+            </div>
+            <div class="info-item">
+                <span class="label">Score:</span>
+                <span id="scoreDisplay">0</span>
+            </div>
+            <div class="info-item">
+                <span class="label">Level:</span>
+                <span id="levelDisplay">1</span>
+            </div>
+        </div>
+        <canvas id="gameCanvas"></canvas>
+        <div class="controls">
+            <p><strong>Controls:</strong> Move your mouse to move the fish</p>
+            <button id="startBtn" class="btn">Start Game</button>
+            <button id="pauseBtn" class="btn">Pause</button>
+        </div>
+        <div id="gameOver" class="game-over hidden">
+            <div class="game-over-content">
+                <h2>Game Over!</h2>
+                <p>Final Score: <span id="finalScore">0</span></p>
+                <p>Final Size: <span id="finalSize">1.0</span></p>
+                <button id="restartBtn" class="btn">Play Again</button>
+            </div>
+        </div>
+    </div>
+    <script src="game.js"></script>
+</body>
+</html>
